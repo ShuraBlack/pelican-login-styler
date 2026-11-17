@@ -6,7 +6,7 @@
     "description": "Restyle the login page: background image settings plus free custom CSS.",
     "category": "plugin",
     "url": null,
-    "update_url": null,
+    "update_url": "https://hub.pelican.dev/plugins/login-styler/update.json",
     "namespace": "ShuraBlack\\LoginStyler",
     "class": "LoginStylerPlugin",
     "panels": null,
