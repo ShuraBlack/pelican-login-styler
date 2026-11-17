@@ -3,7 +3,7 @@
 namespace ShuraBlack\LoginStyler;
 
 use App\Contracts\Plugins\HasPluginSettings;
-use App\Filament\Pages\Auth\Login;
+use App\Traits\EnvironmentWriterTrait;
 use Filament\Contracts\Plugin;
 use Filament\Forms\Components\CodeEditor;
 use Filament\Forms\Components\CodeEditor\Enums\Language;
@@ -14,9 +14,12 @@ use Filament\Notifications\Notification;
 use Filament\Panel;
 use Filament\Schemas\Components\Section;
 use Filament\View\PanelsRenderHook;
+use Throwable;
 
 class LoginStylerPlugin implements HasPluginSettings, Plugin
 {
+    use EnvironmentWriterTrait;
+
     /** option => [label, background-size, background-repeat] */
     private const IMAGE_FITS = [
         'cover' => ['Fill screen', 'cover', 'no-repeat'],
@@ -39,26 +42,50 @@ class LoginStylerPlugin implements HasPluginSettings, Plugin
 
     public function register(Panel $panel): void
     {
-        // Scoped to the login page class, so no other page gets the CSS.
+        if (!$panel->hasLogin()) {
+            return;
+        }
+
+        // Plugins load after Pelican's panel setup, so this replaces its login page.
+        $panel->login(StyledLogin::class);
+
+        // Scoped to the login page class, so no other page gets the CSS or logo.
         $panel->renderHook(PanelsRenderHook::HEAD_END, function (): string {
             $css = self::buildCss($this->getSettingsFormData());
 
             return $css === '' ? '' : '<style id="login-styler">' . $css . '</style>';
-        }, scopes: Login::class);
+        }, scopes: StyledLogin::class);
+
+        // Sits between the "Sign in" heading and the form.
+        $panel->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE, function (): string {
+            $logo = config('login-styler.logo');
+            if (blank($logo)) {
+                return '';
+            }
+            $height = (float) (config('login-styler.logo_height') ?: 80);
+
+            return '<img src="' . e($logo) . '" alt="" class="login-styler-logo" style="display:block;margin:0 auto;max-width:100%;height:' . $height . 'px;object-fit:contain">';
+        }, scopes: StyledLogin::class);
     }
 
     public function boot(Panel $panel): void {}
 
     public function getSettingsFormData(): array
     {
-        $path = self::settingsPath();
-
-        return is_file($path) ? (json_decode((string) file_get_contents($path), true) ?? []) : [];
+        return config('login-styler', []);
     }
 
     public function getSettingsForm(): array
     {
         return [
+            Section::make('Texts & logo')->schema([
+                TextInput::make('title')->label('Title')
+                    ->helperText('Replaces the panel name above the heading. Empty = panel name. Not shown if the panel has a logo image.'),
+                TextInput::make('heading')->label('Heading')->placeholder('Sign in'),
+                TextInput::make('logo')->label('Logo URL')->url()
+                    ->helperText('Optional image shown below the heading. Style it with the .login-styler-logo class.'),
+                TextInput::make('logo_height')->label('Logo height')->numeric()->minValue(1)->suffix('px')->placeholder('80'),
+            ]),
             Section::make('Background')->schema([
                 ColorPicker::make('background_color')->label('Background color'),
                 TextInput::make('background_image')->label('Background image URL')->url(),
@@ -74,11 +101,18 @@ class LoginStylerPlugin implements HasPluginSettings, Plugin
 
     public function saveSettings(array $data): void
     {
-        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $values = [];
+        foreach (array_keys(config('login-styler', [])) as $key) {
+            $values['LOGIN_STYLER_' . strtoupper($key)] = (string) ($data[$key] ?? '');
+        }
+        // .env values must stay on one line; the config file decodes it again.
+        $values['LOGIN_STYLER_CUSTOM_CSS'] = rawurlencode($values['LOGIN_STYLER_CUSTOM_CSS']);
 
         // The panel swallows exceptions from saveSettings, so report failure ourselves.
-        if (@file_put_contents(self::settingsPath(), $json) === false) {
-            Notification::make()->title('Could not write ' . self::settingsPath())->danger()->send();
+        try {
+            $this->writeToEnvironment($values);
+        } catch (Throwable $exception) {
+            Notification::make()->title('Could not save settings')->body($exception->getMessage())->danger()->send();
 
             return;
         }
@@ -120,10 +154,5 @@ class LoginStylerPlugin implements HasPluginSettings, Plugin
 
         // Keep the CSS from closing the <style> tag and injecting HTML.
         return str_replace('</', '<\/', $css);
-    }
-
-    private static function settingsPath(): string
-    {
-        return storage_path('app/login-styler.json');
     }
 }

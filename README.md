@@ -1,10 +1,19 @@
 # Login Styler
 
-Restyle the Pelican login page: set a background color or image, and add your own CSS.
+Restyle the Pelican login page: change the title and heading, add a logo, set a background color or image, and add your own CSS.
 
 ## Settings
 
 Open **Admin → Plugins → Login Styler → Settings**.
+
+### Texts & logo
+
+| Setting | Description |
+|---|---|
+| Title | Replaces the panel name above the heading, on the login page only. Not shown if the panel uses a logo image. |
+| Heading | Replaces "Sign in". |
+| Logo URL | Optional image below the heading. Style it with the `.login-styler-logo` class. |
+| Logo height | In px. Default: 80. |
 
 ### Background
 
@@ -38,6 +47,7 @@ Useful selectors:
 
 ## Notes
 
-- Settings are stored in `storage/app/login-styler.json`, so plugin updates keep them.
+- Settings are stored in the panel's `.env` as `LOGIN_STYLER_*` (the custom CSS URL-encoded), so plugin updates keep them.
 - The CSS applies to the login page only. Because the panel runs in SPA mode, custom CSS can stay active after logging in until the next full page reload. Scope rules with `body:has(.fi-simple-layout)` if that matters.
 - Images on `http://` are blocked on an `https://` panel. Some hosts also block embedding their images on other sites.
+- To change the texts, the plugin swaps Pelican's login page for a small subclass. Other plugins that also replace the login page can conflict with it.
